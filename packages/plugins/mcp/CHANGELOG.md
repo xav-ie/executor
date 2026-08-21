@@ -1,5 +1,19 @@
 # @executor-js/plugin-mcp
 
+## 1.5.43
+
+### Patch Changes
+
+- [#1654](https://github.com/UsefulSoftwareCo/executor/pull/1654) [`256e25e`](https://github.com/UsefulSoftwareCo/executor/commit/256e25e7b291b0c023bc7547d092004b66781bba) Thanks [@RhysSullivan](https://github.com/RhysSullivan)! - **Interrupted stdio dials no longer strand the spawned child process**
+
+  Cancelling an in-flight health check or tool discovery (a UI refresh aborting the request, or the 15s discovery timeout) abandoned the MCP connect handshake without closing the transport, leaving the spawned stdio child running indefinitely: for `docker run -i --rm` integrations, one stranded container per interrupted dial. The connect handshake now aborts on interruption (the SDK closes the transport, ending stdin and escalating to SIGTERM/SIGKILL), and tool discovery closes the connection even when the interrupt lands between the handshake completing and discovery starting.
+
+- Updated dependencies [[`2bdbedf`](https://github.com/UsefulSoftwareCo/executor/commit/2bdbedf257f54d7c209e8c856c618174c10d6bb3)]:
+  - @executor-js/react@1.4.63
+  - @executor-js/sdk@1.5.43
+  - @executor-js/config@1.5.43
+  - @executor-js/api@1.4.63
+
 ## 1.5.42
 
 ### Patch Changes

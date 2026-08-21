@@ -1,5 +1,17 @@
 # @executor-js/plugin-openapi
 
+## 1.5.43
+
+### Patch Changes
+
+- [#1669](https://github.com/UsefulSoftwareCo/executor/pull/1669) [`46cea2c`](https://github.com/UsefulSoftwareCo/executor/commit/46cea2cbb1f414ae58ac876819a51b11967909a6) Thanks [@RhysSullivan](https://github.com/RhysSullivan)! - Request Gmail's basic-settings scope alongside full mailbox access so Google integrations can create and manage Gmail filters without including domain-admin-only sharing settings.
+
+- Updated dependencies [[`2bdbedf`](https://github.com/UsefulSoftwareCo/executor/commit/2bdbedf257f54d7c209e8c856c618174c10d6bb3)]:
+  - @executor-js/react@1.4.63
+  - @executor-js/sdk@1.5.43
+  - @executor-js/config@1.5.43
+  - @executor-js/api@1.4.63
+
 ## 1.5.42
 
 ### Patch Changes
