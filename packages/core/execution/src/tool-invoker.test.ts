@@ -495,12 +495,10 @@ describe("tool discovery", () => {
       const executor = yield* makeSearchExecutor();
 
       const githubMatches = yield* searchTools(executor, "github issues", 5);
-      expect(githubMatches.items.map((match) => match.path)).toEqual([
-        "github.org.main.listRepositoryIssues",
-      ]);
-      expect(githubMatches.items[0]?.score ?? 0).toBeGreaterThan(0);
-      expect(githubMatches.hasMore).toBe(false);
-      expect(githubMatches.nextOffset).toBeNull();
+      expect(githubMatches.items[0]?.path).toBe("github.org.main.listRepositoryIssues");
+      expect(githubMatches.items[0]?.score ?? 0).toBeGreaterThan(
+        githubMatches.items[1]?.score ?? 0,
+      );
 
       const repoMatches = yield* searchTools(executor, "repo details", 5);
       expect(repoMatches.items[0]?.path).toBe("github.org.main.getRepositoryDetails");
@@ -683,12 +681,59 @@ describe("tool discovery", () => {
       expect(sandboxResult.error).toBeUndefined();
       expect(sandboxResult.result).toEqual(
         expect.objectContaining({
-          items: [expect.objectContaining({ path: "crm.org.main.createContact" })],
-          total: 1,
+          items: [
+            expect.objectContaining({ path: "crm.org.main.createContact" }),
+            expect.objectContaining({ path: "crm.org.main.listContacts" }),
+          ],
+          total: 2,
           hasMore: false,
           nextOffset: null,
         }),
       );
+    }),
+  );
+
+  it.effect("keeps natural-language queries whose extra words match no tool", () =>
+    Effect.gen(function* () {
+      const executor = yield* makeSearchExecutor();
+      const matches = yield* searchTools(
+        executor,
+        "can you please create a new contact for me in our system",
+        5,
+      );
+      expect(matches.items[0]?.path).toBe("crm.org.main.createContact");
+    }),
+  );
+
+  it.effect("matches and scopes by integrations a tool declares in MCP _meta", () =>
+    Effect.gen(function* () {
+      const snippets = makeTestPlugin({
+        pluginId: "snippets-test",
+        integration: "snippets",
+        tools: [
+          {
+            name: "mail_search_read",
+            description: "Search mail and read the bodies",
+            inputJsonSchema: EmptyInputJson,
+            validator: EmptyValidator,
+            annotations: {
+              mcp: {
+                toolName: "mail_search_read",
+                _meta: { "executor/integrations": ["proton_mail"] },
+              },
+            } as ToolAnnotations,
+            handler: () => Effect.succeed([]),
+          },
+        ],
+      });
+      const executor = yield* makeExecutorWith([snippets] as const);
+      yield* provision(executor as never, [{ pluginId: "snippets-test", integration: "snippets" }]);
+
+      const ranked = yield* searchTools(executor, "proton mail", 5);
+      expect(ranked.items.map((item) => item.path)).toEqual(["snippets.org.main.mail_search_read"]);
+
+      const scoped = yield* searchTools(executor, "search", 5, { namespace: "proton_mail" });
+      expect(scoped.items.map((item) => item.path)).toEqual(["snippets.org.main.mail_search_read"]);
     }),
   );
 
@@ -812,7 +857,10 @@ describe("tool discovery", () => {
       expect(searched.error).toBeUndefined();
       expect(searched.result).toEqual(
         expect.objectContaining({
-          items: [expect.objectContaining({ path: "crm.org.main.listContacts" })],
+          items: [
+            expect.objectContaining({ path: "crm.org.main.listContacts" }),
+            expect.objectContaining({ path: "crm.org.main.createContact" }),
+          ],
         }),
       );
     }),

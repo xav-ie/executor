@@ -481,13 +481,28 @@ const paginate = <T>(all: readonly T[], offset: number, limit: number): PagedRes
 type SearchableTool = {
   readonly path: string;
   readonly integration: string;
+  /** Integrations a tool works across beyond its own (e.g. a snippet that
+   *  drives slack + proton_mail), matched like `integration`. */
+  readonly integrations: readonly string[];
   readonly name: string;
   readonly description?: string;
+};
+
+/** MCP servers declare extra integrations via the tool's `_meta`, which the
+ *  mcp plugin persists verbatim under `annotations.mcp._meta`. */
+const INTEGRATIONS_META_KEY = "executor/integrations";
+
+const readIntegrations = (tool: Tool): readonly string[] => {
+  const meta = (tool.annotations as { mcp?: { _meta?: Record<string, unknown> } } | undefined)?.mcp
+    ?._meta;
+  const value = meta?.[INTEGRATIONS_META_KEY];
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
 };
 
 const toSearchableTool = (tool: Tool): SearchableTool => ({
   path: addressToPath(String(tool.address)),
   integration: String(tool.integration),
+  integrations: readIntegrations(tool),
   name: String(tool.name),
   description: tool.description,
 });
@@ -598,7 +613,11 @@ const matchesNamespace = (tool: SearchableTool, namespace?: string): boolean => 
   const isPrefixMatch = (tokens: readonly string[]): boolean =>
     namespaceTokens.every((token, index) => tokens[index] === token);
 
-  return isPrefixMatch(integrationTokens) || isPrefixMatch(pathTokens);
+  return (
+    isPrefixMatch(integrationTokens) ||
+    isPrefixMatch(pathTokens) ||
+    tool.integrations.some((integration) => isPrefixMatch(tokenizeSearchText(integration)))
+  );
 };
 
 const scoreToolMatch = (tool: SearchableTool, query: string): ToolDiscoveryResult | null => {
@@ -611,23 +630,28 @@ const scoreToolMatch = (tool: SearchableTool, query: string): ToolDiscoveryResul
 
   const path = prepareField(tool.path);
   const integration = prepareField(tool.integration);
+  const integrations = prepareField(tool.integrations.join(" "));
   const name = prepareField(tool.name);
   const description = prepareField(tool.description);
 
   const fieldScores = [
     scorePreparedField(normalizedQuery, queryTokens, path, SEARCH_FIELD_WEIGHTS.path),
     scorePreparedField(normalizedQuery, queryTokens, integration, SEARCH_FIELD_WEIGHTS.integration),
+    scorePreparedField(
+      normalizedQuery,
+      queryTokens,
+      integrations,
+      SEARCH_FIELD_WEIGHTS.integration,
+    ),
     scorePreparedField(normalizedQuery, queryTokens, name, SEARCH_FIELD_WEIGHTS.name),
     scorePreparedField(normalizedQuery, queryTokens, description, SEARCH_FIELD_WEIGHTS.description),
   ];
 
   const matchedTokens = new Set<string>();
   let score = 0;
-  let exactPhraseMatch = false;
 
   for (const fieldScore of fieldScores) {
     score += fieldScore.score;
-    exactPhraseMatch ||= fieldScore.exactPhraseMatch;
     for (const token of fieldScore.matchedTokens) {
       matchedTokens.add(token);
     }
@@ -637,12 +661,9 @@ const scoreToolMatch = (tool: SearchableTool, query: string): ToolDiscoveryResul
     return null;
   }
 
+  // Coverage ranks, it does not filter: a hard minimum dropped every tool for
+  // natural-language queries, whose extra words rarely appear in any tool.
   const coverage = matchedTokens.size / queryTokens.length;
-  const minimumCoverage = queryTokens.length <= 2 ? 1 : 0.6;
-
-  if (coverage < minimumCoverage && !exactPhraseMatch) {
-    return null;
-  }
 
   if (coverage === 1) {
     score += 25;
