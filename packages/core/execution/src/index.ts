@@ -27,6 +27,7 @@ export {
 } from "./skills";
 export { PROVIDED_GLOBAL_NAMES } from "./provided-globals";
 export { ExecutionToolError } from "./errors";
+export { CurrentUsageSession, flushUsageLog } from "./usage-log";
 export {
   defaultToolDiscoveryProvider,
   makeExecutorToolInvoker,

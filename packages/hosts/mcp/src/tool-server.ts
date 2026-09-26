@@ -69,6 +69,7 @@ import {
   type ExecutionResult,
   type PausedExecution,
   type PausedExecutionDeadline,
+  CurrentUsageSession,
 } from "@executor-js/execution";
 import {
   MCP_APPS_SHELL_RESOURCE_URI,
@@ -1644,6 +1645,7 @@ export const createExecutorMcpServer = <E extends Cause.YieldableError>(
             CurrentOrgWriteAccess,
             makeOrgWriteAccessState(requestOrgWriteAccess(extra)),
           ),
+          Effect.provideService(CurrentUsageSession, extra.sessionId),
           Effect.catchCause((cause) => Effect.succeed(toMcpFailureResult(cause))),
         ),
       );

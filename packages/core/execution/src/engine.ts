@@ -26,6 +26,7 @@ import {
   type ToolDiscoveryProvider,
 } from "./tool-invoker";
 import { ExecutionToolError } from "./errors";
+import { withUsageLog } from "./usage-log";
 import { buildExecuteDescription } from "./description";
 
 // ---------------------------------------------------------------------------
@@ -346,7 +347,7 @@ const makeFullInvoker = (
   onConnectedToolCall?: (path: string) => void,
 ): SandboxToolInvoker => {
   const base = makeExecutorToolInvoker(executor, { invokeOptions, onConnectedToolCall });
-  return {
+  return withUsageLog({
     invoke: ({ path, args }) => {
       if (path === "search") {
         if (!isRecord(args)) {
@@ -485,7 +486,7 @@ const makeFullInvoker = (
       }
       return base.invoke({ path, args });
     },
-  };
+  });
 };
 
 // ---------------------------------------------------------------------------
