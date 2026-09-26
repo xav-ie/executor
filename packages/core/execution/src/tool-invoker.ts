@@ -18,6 +18,7 @@ import {
   parseToolAddress,
 } from "@executor-js/sdk/core";
 import type { SandboxToolInvoker } from "@executor-js/codemode-core";
+import { embeddingRanking, fuseRankings, keywordWeight } from "./embedding-search";
 import { ExecutionToolError } from "./errors";
 
 const OPAQUE_DEFECT_MESSAGE = "Internal tool error";
@@ -691,6 +692,38 @@ const scoreToolMatch = (tool: SearchableTool, query: string): ToolDiscoveryResul
   };
 };
 
+/** Keyword ranking, fused with embedding similarity when EXECUTOR_EMBED_URL is
+ *  set. Fused scores are weighted RRF sums x 10_000, so they stay integers
+ *  but are not comparable to keyword-only scores. */
+const rankedSearch = (candidates: readonly SearchableTool[], query: string) =>
+  Effect.gen(function* () {
+    const keyword = candidates
+      .map((tool) => scoreToolMatch(tool, query))
+      .filter(Predicate.isNotNull)
+      .sort((left, right) => right.score - left.score || left.path.localeCompare(right.path));
+    const dense = yield* embeddingRanking(candidates, query);
+    if (!dense) return keyword;
+
+    const fused = fuseRankings(
+      keyword.map((r) => r.path),
+      dense,
+      keywordWeight(tokenizeSearchText(query).length),
+    );
+    const byPath = new Map(candidates.map((tool) => [tool.path, tool]));
+    return [...fused]
+      .map(([path, score]): ToolDiscoveryResult => {
+        const tool = byPath.get(path)!;
+        return {
+          path,
+          name: tool.name,
+          integration: tool.integration,
+          score: Math.round(score * 10_000),
+          ...(tool.description !== undefined ? { description: tool.description } : {}),
+        };
+      })
+      .sort((left, right) => right.score - left.score || left.path.localeCompare(right.path));
+  });
+
 /** What `tools.search()` calls inside the sandbox. */
 export const searchTools = Effect.fn("executor.tools.search")(function* (
   executor: { readonly tools: Pick<Executor["tools"], "list"> },
@@ -752,11 +785,10 @@ export const searchTools = Effect.fn("executor.tools.search")(function* (
           score: 0,
           ...(tool.description !== undefined ? { description: tool.description } : {}),
         }))
-    : searchable
-        .filter((tool: SearchableTool) => matchesNamespace(tool, options?.namespace))
-        .map((tool: SearchableTool) => scoreToolMatch(tool, query))
-        .filter(Predicate.isNotNull)
-        .sort((left, right) => right.score - left.score || left.path.localeCompare(right.path));
+    : yield* rankedSearch(
+        searchable.filter((tool: SearchableTool) => matchesNamespace(tool, options?.namespace)),
+        query,
+      );
 
   const page = paginate(ranked, offset, limit);
 
